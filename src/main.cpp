@@ -6,7 +6,7 @@
 #include <EEPROM.h>
 #include <ESP32Ping.h>
 #include <esp_task_wdt.h>
-#include "credentials.h" // Mengambil kredensial dari file terpisah
+#include "credentials.h"
 
 // --- Include library LCDBigNumbers ---
 #define USE_SERIAL_2004_LCD
@@ -21,6 +21,7 @@ namespace Config {
   constexpr unsigned long SIGNAL_UPDATE_INTERVAL  = 2000;
   constexpr unsigned long INTERNET_CHECK_INTERVAL = 10000;
   constexpr unsigned long STATUS_MSG_DURATION     = 2000; // Durasi pesan "Sukses/Gagal"
+  constexpr unsigned long CALIBRATION_VALUE       = 12.01;
 
   // Weight settings
   constexpr float MIN_WEIGHT_THRESHOLD = 0.1f; // Perubahan minimal untuk update LCD
@@ -66,7 +67,7 @@ ezButton tombol[] = {
 // ==================== GLOBAL VARIABLES ====================
 AppState currentState = AppState::IDLE;
 SampahType sampah;
-char fakultas[8] = "FPsi";
+char fakultas[8] = "FKM";
 bool isOnline = false;
 
 // Weight management
@@ -129,7 +130,7 @@ void setup() {
   Serial.begin(115200);
   Serial.println("\nStarting production firmware...");
 
-  esp_task_wdt_init(10, true); 
+  esp_task_wdt_init(60, true); 
   esp_task_wdt_add(NULL);
   Serial.println("Watchdog Timer activated.");
 
@@ -252,7 +253,7 @@ void initializeSystem() {
   bigNumbers.begin();
   
   LoadCell.begin();
-  float calibrationValue = 12.186;
+  float calibrationValue = Config::CALIBRATION_VALUE;
   EEPROM.begin(512);
   LoadCell.start(2000, true);
   if (LoadCell.getTareTimeoutFlag()) {
