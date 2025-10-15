@@ -21,10 +21,10 @@ namespace Config {
   constexpr unsigned long SIGNAL_UPDATE_INTERVAL  = 2000;
   constexpr unsigned long INTERNET_CHECK_INTERVAL = 10000;
   constexpr unsigned long STATUS_MSG_DURATION     = 2000; // Durasi pesan "Sukses/Gagal"
-  constexpr unsigned long CALIBRATION_VALUE       = 12.333372;
+  constexpr unsigned long CALIBRATION_VALUE       = 12.01;
 
   // Weight settings
-  constexpr float MIN_WEIGHT_THRESHOLD = 0.01f; // Perubahan minimal untuk update LCD
+  constexpr float MIN_WEIGHT_THRESHOLD = 0.1f; // Perubahan minimal untuk update LCD
 
   // Pin configuration
   constexpr int PIN_TOMBOL_1 = 27;
@@ -67,7 +67,7 @@ ezButton tombol[] = {
 // ==================== GLOBAL VARIABLES ====================
 AppState currentState = AppState::IDLE;
 SampahType sampah;
-char fakultas[8] = "FSM";
+char fakultas[8] = "FIB";
 bool isOnline = false;
 
 // Weight management

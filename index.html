@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weight Wizard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+    <script src="https://unpkg.com/feather-icons"></script>
+    <!-- Include Paho MQTT library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.2/mqttws31.min.js" type="text/javascript"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            400: '#60a5fa',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                        },
+                        secondary: {
+                            400: '#fbbf24',
+                            500: '#f59e0b',
+                            600: '#d97706',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .loading-dots span {
+            animation: blink 1.4s infinite both;
+        }
+        .loading-dots span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        .loading-dots span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        
+        .connection-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        @media (min-width: 768px) {
+            .connection-panel {
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: flex-start;
+            }
+            
+            .connection-section {
+                flex: 1;
+            }
+            
+            .mqtt-section {
+                min-width: 500px;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-full bg-gray-100 dark:bg-gray-900 transition-colors duration-300">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <header class="mb-8 text-center">
+            <h1 class="text-4xl font-bold text-primary-600 dark:text-primary-400 mb-2">Scale Monitor</h1>
+            <p class="text-gray-600 dark:text-gray-300">Powered by MQTT</p>
+        </header>
+
+        <main class="bg-white dark:bg-gray-800 rounded-xl shadow-xl overflow-hidden backdrop-blur-md bg-opacity-70 dark:bg-opacity-70 border border-gray-200 dark:border-gray-700 transition-all duration-300">
+            <!-- Connection Panel -->
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                <div class="connection-panel">
+                    <!-- Serial Connection -->
+                    <div class="connection-section">
+                        <div class="flex items-center gap-3 mb-2">
+                            <div class="w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600" id="connectionStatus"></div>
+                            <span id="connectionStatusText" class="font-medium">Serial: Disconnected</span>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button id="connectBtn" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg flex items-center gap-2 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-opacity-50">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-plug">
+                                    <path d="M12 22v-5"></path>
+                                    <path d="M9 8V2"></path>
+                                    <path d="M15 8V2"></path>
+                                    <path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z"></path>
+                                </svg>
+                                Connect Serial
+                            </button>
+                            <button id="disconnectBtn" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg flex items-center gap-2 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50" disabled>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-plug">
+                                    <path d="M12 22v-5"></path>
+                                    <path d="M9 8V2"></path>
+                                    <path d="M15 8V2"></path>
+                                    <path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z"></path>
+                                    <line x1="2" y1="2" x2="22" y2="22"></line>
+                                </svg>
+                                Disconnect
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- MQTT Connection -->
+                    <div class="connection-section mqtt-section">
+                        <div class="flex items-center gap-3 mb-2">
+                            <div class="w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600" id="mqttConnectionStatus"></div>
+                            <span id="mqttConnectionStatusText" class="font-medium">MQTT: Disconnected</span>
+                        </div>
+                        <div class="space-y-2">
+                            <div class="flex flex-wrap gap-2">
+                                <input type="text" id="mqttHost" placeholder="Host" class="flex-1 min-w-[150px] px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent" value="mqtt-dashboard.com">
+                                <input type="text" id="mqttPort" placeholder="Port" class="w-20 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent" value="8884">
+                                <input type="text" id="mqttTopic" placeholder="Topic" class="flex-1 min-w-[150px] px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent" value="undip/#">
+                                <input type="text" id="mqttUsername" placeholder="Username (optional)" class="flex-1 min-w-[120px] px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent">
+                                <input type="password" id="mqttPassword" placeholder="Password (optional)" class="flex-1 min-w-[120px] px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent">
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <div class="flex items-center gap-2">
+                                    <input type="checkbox" id="sslCheckbox" class="rounded" checked>
+                                    <label for="sslCheckbox" class="text-sm text-gray-600 dark:text-gray-400">SSL</label>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <input type="checkbox" id="cleanSessionCheckbox" class="rounded" checked>
+                                    <label for="cleanSessionCheckbox" class="text-sm text-gray-600 dark:text-gray-400">Clean Session</label>
+                                </div>
+                                <input type="text" id="keepAliveInput" placeholder="Keep Alive" class="w-20 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent" value="60">
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <button id="mqttConnectBtn" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg flex items-center gap-2 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-opacity-50">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-wifi">
+                                        <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
+                                        <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
+                                        <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+                                        <line x1="12" y1="20" x2="12.01" y2="20"></line>
+                                    </svg>
+                                    Connect MQTT
+                                </button>
+                                <button id="mqttDisconnectBtn" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg flex items-center gap-2 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50" disabled>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-wifi-off">
+                                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                                        <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path>
+                                        <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path>
+                                        <path d="M10.71 5.05A16 16 0 0 1 22.58 9"></path>
+                                        <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path>
+                                        <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+                                        <line x1="12" y1="20" x2="12.01" y2="20"></line>
+                                    </svg>
+                                    Disconnect
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Weight Display -->
+            <div class="p-6 flex flex-col items-center justify-center gap-4">
+                <div class="text-center mb-4">
+                    <div class="text-9xl font-bold text-gray-800 dark:text-white transition-all duration-300" id="weightDisplay">-</div>
+                    <div class="flex justify-center gap-2 mt-4">
+                        <button id="unitToggle" class="px-3 py-1 bg-gray-200 dark:bg-gray-700 rounded-lg">g</button>
+                        <button id="resetBtn" class="px-3 py-1 bg-secondary-500 hover:bg-secondary-600 text-white rounded-lg flex items-center gap-1 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-rotate-ccw">
+                                <polyline points="1 4 1 10 7 10"></polyline>
+                                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                            </svg>
+                            Tare
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Zoom Controls -->
+                <div class="flex gap-2 mb-6">
+                    <button data-size="small" class="zoom-btn px-3 py-1 bg-gray-200 dark:bg-gray-700 rounded-lg text-sm">S</button>
+                    <button data-size="medium" class="zoom-btn px-3 py-1 bg-secondary-500 text-white rounded-lg text-base">M</button>
+                    <button data-size="large" class="zoom-btn px-3 py-1 bg-gray-200 dark:bg-gray-700 rounded-lg text-lg">L</button>
+                </div>
+            </div>
+
+            <!-- Log Panel -->
+            <div class="border-t border-gray-200 dark:border-gray-700 p-6">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-medium text-gray-800 dark:text-gray-200">Raw Data Log</h3>
+                    <button id="clearLogBtn" class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm flex items-center gap-1 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-trash-2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            <line x1="10" y1="11" x2="10" y2="17"></line>
+                            <line x1="14" y1="11" x2="14" y2="17"></line>
+                        </svg>
+                        Clear
+                    </button>
+                </div>
+                <div id="logArea" class="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 h-48 overflow-y-auto font-mono text-sm text-gray-800 dark:text-gray-300 border border-gray-200 dark:border-gray-700"></div>
+            </div>
+        </main>
+
+        <!-- Theme Toggle -->
+        <div class="mt-6 flex justify-center">
+            <button id="themeToggle" class="p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 transition-colors">
+                <svg id="themeIcon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-sun">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const weightDisplay = document.getElementById('weightDisplay');
+        const unitToggle = document.getElementById('unitToggle');
+        const resetBtn = document.getElementById('resetBtn');
+        const clearLogBtn = document.getElementById('clearLogBtn');
+        const logArea = document.getElementById('logArea');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const connectionStatusText = document.getElementById('connectionStatusText');
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
+        const zoomButtons = document.querySelectorAll('.zoom-btn');
+
+        // MQTT Elements
+        const mqttConnectBtn = document.getElementById('mqttConnectBtn');
+        const mqttDisconnectBtn = document.getElementById('mqttDisconnectBtn');
+        const mqttHost = document.getElementById('mqttHost');
+        const mqttPort = document.getElementById('mqttPort');
+        const mqttTopic = document.getElementById('mqttTopic');
+        const mqttUsername = document.getElementById('mqttUsername');
+        const mqttPassword = document.getElementById('mqttPassword');
+        const sslCheckbox = document.getElementById('sslCheckbox');
+        const cleanSessionCheckbox = document.getElementById('cleanSessionCheckbox');
+        const keepAliveInput = document.getElementById('keepAliveInput');
+        const mqttConnectionStatus = document.getElementById('mqttConnectionStatus');
+        const mqttConnectionStatusText = document.getElementById('mqttConnectionStatusText');
+
+        // State
+        let port;
+        let reader;
+        let keepReading = false;
+        let connected = false;
+        let currentUnit = localStorage.getItem('weightUnit') || 'g';
+        let tareValue = 0;
+        let fontSize = 'medium';
+        let rawValueFromSensor = 0;
+        
+        // MQTT State
+        let mqttClient = null;
+        let mqttConnected = false;
+
+        // Initialize
+        function init() {
+            // Set up event listeners
+            connectBtn.addEventListener('click', handleConnect);
+            disconnectBtn.addEventListener('click', handleDisconnect);
+            unitToggle.addEventListener('click', toggleUnit);
+            resetBtn.addEventListener('click', handleReset);
+            clearLogBtn.addEventListener('click', clearLog);
+            themeToggle.addEventListener('click', toggleTheme);
+            
+            // MQTT Event listeners
+            mqttConnectBtn.addEventListener('click', connectMqtt);
+            mqttDisconnectBtn.addEventListener('click', disconnectMqtt);
+            
+            zoomButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    fontSize = btn.dataset.size;
+                    updateWeightDisplaySize();
+                    zoomButtons.forEach(b => {
+                        if (b === btn) {
+                            b.classList.remove('bg-gray-200', 'dark:bg-gray-700');
+                            b.classList.add('bg-secondary-500', 'text-white');
+                        } else {
+                            b.classList.remove('bg-secondary-500', 'text-white');
+                            b.classList.add('bg-gray-200', 'dark:bg-gray-700');
+                        }
+                    });
+                });
+            });
+
+            // Set initial unit
+            unitToggle.textContent = currentUnit;
+            
+            // Check for dark mode preference
+            if (localStorage.getItem('darkMode') === 'true' || 
+                (!localStorage.getItem('darkMode') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+                themeIcon.setAttribute('data-feather', 'moon');
+            } else {
+                themeIcon.setAttribute('data-feather', 'sun');
+            }
+            
+            feather.replace();
+        }
+
+        // Connection handling
+        async function handleConnect() {
+            if (!navigator.serial) {
+                logToConsole('Web Serial API not supported in this browser.');
+                updateConnectionStatus('error', 'Serial: Not supported');
+                return;
+            }
+
+            try {
+                updateConnectionStatus('connecting', 'Serial: Connecting...');
+                
+                // Show connecting state
+                connectBtn.innerHTML = `
+                    <span class="loading-dots">
+                        <span>.</span><span>.</span><span>.</span>
+                    </span>
+                    Connecting
+                `;
+                connectBtn.disabled = true;
+                
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 115200 });
+
+                logToConsole('✅ Serial port opened.');
+
+                // Use TextDecoderStream for better data handling
+                const decoder = new TextDecoderStream();
+                port.readable.pipeTo(decoder.writable);
+                const inputStream = decoder.readable;
+
+                reader = inputStream.getReader();
+                connected = true;
+                keepReading = true;
+                updateConnectionStatus('connected', 'Serial: Connected');
+                
+                connectBtn.style.display = 'none';
+                disconnectBtn.disabled = false;
+                
+                // Start reading data with improved parsing
+                readLoop();
+            } catch (error) {
+                logToConsole(`Connection error: ${error.message}`);
+                updateConnectionStatus('error', 'Serial: Connection failed');
+                resetConnectButton();
+            }
+        }
+
+        async function handleDisconnect() {
+            try {
+                keepReading = false;
+                if (reader) {
+                    await reader.cancel();
+                    await reader.releaseLock();
+                    reader = null;
+                }
+                if (port) {
+                    await port.close();
+                    port = null;
+                }
+                
+                connected = false;
+                updateConnectionStatus('disconnected', 'Serial: Disconnected');
+                disconnectBtn.disabled = true;
+                connectBtn.style.display = 'flex';
+                resetConnectButton();
+                
+                logToConsole('🔌 Serial port closed.');
+            } catch (error) {
+                logToConsole(`Disconnection error: ${error.message}`);
+            }
+        }
+
+        // Data reading with improved parsing
+        async function readLoop() {
+            let buffer = '';
+            try {
+                while (keepReading && reader) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    
+                    if (value) {
+                        buffer += value;
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop(); // last partial line
+                        
+                        for (const line of lines) {
+                            const trimmed = line.trim();
+                            if (trimmed) {
+                                logToConsole('Serial: ' + trimmed);
+                                
+                                // Improved parsing
+                                const num = parseFloat(trimmed);
+                                if (!isNaN(num)) {
+                                    rawValueFromSensor = num;
+                                    const displayValue = rawValueFromSensor - tareValue;
+                                    updateWeightDisplay(displayValue);
+                                } else {
+                                    logToConsole(`⚠️ Invalid data: "${trimmed}"`);
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                logToConsole(`Read error: ${error.message}`);
+                if (connected) {
+                    await handleDisconnect();
+                }
+            }
+        }
+
+        // Helper function to generate random client ID like HiveMQ demo
+        function randomString(length) {
+            var text = "";
+            var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+            for (var i = 0; i < length; i++)
+                text += possible.charAt(Math.floor(Math.random() * possible.length));
+            return text;
+        }
+
+        // MQTT Functions using Paho MQTT - CORRECTED VERSION
+        function connectMqtt() {
+            const host = mqttHost.value.trim();
+            const port = mqttPort.value.trim();
+            const topic = mqttTopic.value.trim();
+            const username = mqttUsername.value.trim();
+            const password = mqttPassword.value.trim();
+            const useSSL = sslCheckbox.checked;
+            const cleanSession = cleanSessionCheckbox.checked;
+            const keepAlive = parseInt(keepAliveInput.value.trim()) || 60;
+
+            if (!host) {
+                logToConsole('❌ MQTT Host is required');
+                return;
+            }
+
+            if (!port) {
+                logToConsole('❌ MQTT Port is required');
+                return;
+            }
+
+            if (!topic) {
+                logToConsole('❌ MQTT Topic is required');
+                return;
+            }
+
+            updateMqttConnectionStatus('connecting', 'MQTT: Connecting...');
+
+            // Show connecting state
+            mqttConnectBtn.innerHTML = `
+                <span class="loading-dots">
+                    <span>.</span><span>.</span><span>.</span>
+                </span>
+                Connecting
+            `;
+            mqttConnectBtn.disabled = true;
+
+            try {
+                // Generate client ID like HiveMQ demo
+                const clientID = "clientId_" + randomString(8);
+                
+                logToConsole(`🔗 Connecting to ${host} on port ${port}`);
+                logToConsole(`🔗 Using client ID: ${clientID}`);
+                logToConsole(`🔗 SSL: ${useSSL}, Clean Session: ${cleanSession}, Keep Alive: ${keepAlive}`);
+
+                // Create client instance - SIMPLIFIED like HiveMQ demo
+                mqttClient = new Paho.MQTT.Client(host, Number(port), clientID);
+
+                // Set callback handlers
+                mqttClient.onConnectionLost = onMqttConnectionLost;
+                mqttClient.onMessageArrived = onMqttMessageArrived;
+
+                // Connect options - SIMPLIFIED like HiveMQ demo
+                const connectOptions = {
+                    onSuccess: onMqttConnect,
+                    onFailure: onMqttConnectFailure,
+                    useSSL: useSSL,
+                    timeout: 10,
+                    keepAliveInterval: keepAlive,
+                    cleanSession: cleanSession
+                };
+
+                // Add username and password only if provided
+                if (username) {
+                    connectOptions.userName = username;
+                    logToConsole('🔑 Using username for authentication');
+                }
+                if (password) {
+                    connectOptions.password = password;
+                    logToConsole('🔑 Using password for authentication');
+                }
+
+                mqttClient.connect(connectOptions);
+
+            } catch (error) {
+                logToConsole(`❌ MQTT connection error: ${error.message}`);
+                updateMqttConnectionStatus('error', 'MQTT: Connection failed');
+                resetMqttConnectButton();
+            }
+        }
+
+        function onMqttConnect() {
+            const topic = mqttTopic.value.trim();
+            logToConsole('✅ MQTT Connected successfully');
+            updateMqttConnectionStatus('connected', 'MQTT: Connected');
+            
+            logToConsole(`📡 Subscribing to topic: ${topic}`);
+            mqttClient.subscribe(topic, {
+                onSuccess: function() {
+                    logToConsole(`✅ Successfully subscribed to: ${topic}`);
+                },
+                onFailure: function(error) {
+                    logToConsole(`❌ Failed to subscribe: ${error.errorMessage}`);
+                }
+            });
+            
+            mqttConnectBtn.style.display = 'none';
+            mqttDisconnectBtn.disabled = false;
+            resetMqttConnectButton();
+        }
+
+        function onMqttConnectFailure(error) {
+            logToConsole(`❌ MQTT Connection failed: ${error.errorMessage}`);
+            
+            // Provide more specific error messages
+            if (error.errorCode === 7) {
+                logToConsole('💡 Tip: Check if the host and port are correct');
+                logToConsole('💡 For mqtt-dashboard.com, use port 8884 (SSL) or try other ports');
+            }
+            
+            updateMqttConnectionStatus('error', 'MQTT: Connection failed');
+            resetMqttConnectButton();
+        }
+
+        function onMqttConnectionLost(responseObject) {
+            if (responseObject.errorCode !== 0) {
+                logToConsole(`❌ MQTT Connection lost: ${responseObject.errorMessage}`);
+            } else {
+                logToConsole('🔌 MQTT Connection closed normally');
+            }
+            updateMqttConnectionStatus('disconnected', 'MQTT: Disconnected');
+            resetMqttConnectButton();
+            mqttConnectBtn.style.display = 'flex';
+            mqttDisconnectBtn.disabled = true;
+        }
+
+        function onMqttMessageArrived(message) {
+            const data = message.payloadString;
+            logToConsole(`MQTT [${message.destinationName}]: ${data}`);
+
+            // Parse the data
+            try {
+                let weightValue;
+
+                // Try to parse as JSON first
+                try {
+                    const jsonData = JSON.parse(data);
+                    // If it's an object, look for weight property
+                    if (typeof jsonData === 'object' && jsonData !== null) {
+                        if (jsonData.weight !== undefined) {
+                            weightValue = jsonData.weight;
+                        } else if (jsonData.value !== undefined) {
+                            weightValue = jsonData.value;
+                        } else if (jsonData.data !== undefined) {
+                            weightValue = jsonData.data;
+                        } else {
+                            // Use the first numeric property found
+                            const numericProps = Object.values(jsonData).filter(val => !isNaN(parseFloat(val)) && isFinite(val));
+                            if (numericProps.length > 0) {
+                                weightValue = numericProps[0];
+                            } else {
+                                weightValue = data;
+                            }
+                        }
+                    } else {
+                        weightValue = data;
+                    }
+                } catch (e) {
+                    // Not JSON, use as is
+                    weightValue = data;
+                }
+
+                const num = parseFloat(weightValue);
+                if (!isNaN(num) && isFinite(num)) {
+                    rawValueFromSensor = num;
+                    const displayValue = rawValueFromSensor - tareValue;
+                    updateWeightDisplay(displayValue);
+                    logToConsole(`📊 Weight updated from MQTT: ${num} g`);
+                } else {
+                    logToConsole(`⚠️ MQTT Invalid numeric data: "${data}"`);
+                }
+            } catch (error) {
+                logToConsole(`⚠️ MQTT Data parsing error: ${error.message}`);
+            }
+        }
+
+        function disconnectMqtt() {
+            if (mqttClient) {
+                mqttClient.disconnect();
+            }
+            
+            mqttConnected = false;
+            updateMqttConnectionStatus('disconnected', 'MQTT: Disconnected');
+            mqttDisconnectBtn.disabled = true;
+            mqttConnectBtn.style.display = 'flex';
+            resetMqttConnectButton();
+            
+            logToConsole('🔌 MQTT disconnected.');
+        }
+
+        function updateMqttConnectionStatus(status, text) {
+            mqttConnectionStatusText.textContent = text;
+            
+            switch (status) {
+                case 'connected':
+                    mqttConnectionStatus.classList.remove('bg-gray-300', 'bg-yellow-400', 'bg-red-500');
+                    mqttConnectionStatus.classList.add('bg-green-500');
+                    break;
+                case 'connecting':
+                    mqttConnectionStatus.classList.remove('bg-gray-300', 'bg-green-500', 'bg-red-500');
+                    mqttConnectionStatus.classList.add('bg-yellow-400');
+                    break;
+                case 'error':
+                    mqttConnectionStatus.classList.remove('bg-gray-300', 'bg-green-500', 'bg-yellow-400');
+                    mqttConnectionStatus.classList.add('bg-red-500');
+                    break;
+                default: // disconnected
+                    mqttConnectionStatus.classList.remove('bg-green-500', 'bg-yellow-400', 'bg-red-500');
+                    mqttConnectionStatus.classList.add('bg-gray-300', 'dark:bg-gray-600');
+            }
+        }
+
+        // UI Updates
+        function updateWeightDisplay(value) {
+            let displayValue;
+            
+            // Convert based on unit
+            switch (currentUnit) {
+                case 'kg':
+                    displayValue = (value / 1000).toFixed(3);
+                    break;
+                case 'lbs':
+                    displayValue = (value * 0.00220462).toFixed(3);
+                    break;
+                default: // g
+                    displayValue = value.toFixed(2);
+            }
+            
+            weightDisplay.textContent = displayValue;
+        }
+
+        function updateWeightDisplaySize() {
+            weightDisplay.className = 'text-center font-bold transition-all duration-300';
+            
+            switch (fontSize) {
+                case 'small':
+                    weightDisplay.classList.add('text-5xl', 'text-gray-800', 'dark:text-white');
+                    break;
+                case 'medium':
+                    weightDisplay.classList.add('text-7xl', 'text-gray-800', 'dark:text-white');
+                    break;
+                case 'large':
+                    weightDisplay.classList.add('text-9xl', 'text-gray-800', 'dark:text-white');
+                    break;
+            }
+        }
+
+        function updateConnectionStatus(status, text) {
+            connectionStatusText.textContent = text;
+            
+            switch (status) {
+                case 'connected':
+                    connectionStatus.classList.remove('bg-gray-300', 'bg-yellow-400', 'bg-red-500');
+                    connectionStatus.classList.add('bg-green-500');
+                    break;
+                case 'connecting':
+                    connectionStatus.classList.remove('bg-gray-300', 'bg-green-500', 'bg-red-500');
+                    connectionStatus.classList.add('bg-yellow-400');
+                    break;
+                case 'error':
+                    connectionStatus.classList.remove('bg-gray-300', 'bg-green-500', 'bg-yellow-400');
+                    connectionStatus.classList.add('bg-red-500');
+                    break;
+                default: // disconnected
+                    connectionStatus.classList.remove('bg-green-500', 'bg-yellow-400', 'bg-red-500');
+                    connectionStatus.classList.add('bg-gray-300', 'dark:bg-gray-600');
+            }
+        }
+
+        // Unit conversion
+        function toggleUnit() {
+            switch (currentUnit) {
+                case 'g':
+                    currentUnit = 'kg';
+                    break;
+                case 'kg':
+                    currentUnit = 'lbs';
+                    break;
+                case 'lbs':
+                    currentUnit = 'g';
+                    break;
+            }
+            
+            unitToggle.textContent = currentUnit;
+            localStorage.setItem('weightUnit', currentUnit);
+            
+            // Force update of displayed value
+            const displayValue = rawValueFromSensor - tareValue;
+            updateWeightDisplay(displayValue);
+        }
+
+        // Reset (tare)
+        function handleReset() {
+            tareValue = rawValueFromSensor;
+            logToConsole(`Tare set to ${tareValue.toFixed(2)}g`);
+            updateWeightDisplay(0);
+        }
+
+        // Logging
+        function logToConsole(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            
+            logArea.appendChild(logEntry);
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+        function clearLog() {
+            logArea.innerHTML = '';
+        }
+
+        // Theme handling
+        function toggleTheme() {
+            if (document.documentElement.classList.contains('dark')) {
+                document.documentElement.classList.remove('dark');
+                localStorage.setItem('darkMode', 'false');
+                themeIcon.setAttribute('data-feather', 'sun');
+            } else {
+                document.documentElement.classList.add('dark');
+                localStorage.setItem('darkMode', 'true');
+                themeIcon.setAttribute('data-feather', 'moon');
+            }
+            feather.replace();
+        }
+
+        // Helper functions
+        function resetConnectButton() {
+            connectBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-plug">
+                    <path d="M12 22v-5"></path>
+                    <path d="M9 8V2"></path>
+                    <path d="M15 8V2"></path>
+                    <path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z"></path>
+                </svg>
+                Connect Serial
+            `;
+            connectBtn.disabled = false;
+        }
+
+        function resetMqttConnectButton() {
+            mqttConnectBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-wifi">
+                    <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
+                    <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
+                    <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+                    <line x1="12" y1="20" x2="12.01" y2="20"></line>
+                </svg>
+                Connect MQTT
+            `;
+            mqttConnectBtn.disabled = false;
+        }
+
+        // Initialize everything
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+    <script>feather.replace();</script>
+</body>
+</html>
