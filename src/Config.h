@@ -18,7 +18,7 @@ namespace Config {
   constexpr float CALIBRATION_VALUE = 12.487849f;
   constexpr float MIN_WEIGHT_THRESHOLD = 0.01f;
   constexpr float NOISE_GATE_THRESHOLD = 0.01f;
-  constexpr int LOAD_CELL_SAMPLES = 16;
+  constexpr int LOAD_CELL_SAMPLES = 4;
   
   // Pin Configuration
   constexpr int PIN_TOMBOL_1 = 27;

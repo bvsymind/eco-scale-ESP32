@@ -257,6 +257,10 @@ void handleSendData() {
 float readSmoothedWeight() {
   float rawWeight = loadCell.getData();
   float weightKg = rawWeight / 1000.0f;
+
+  if (weightKg < 0.0) {
+    weightKg = 0.0;
+  }
   
   // Noise gate
   if (abs(weightKg) < Config::NOISE_GATE_THRESHOLD) {

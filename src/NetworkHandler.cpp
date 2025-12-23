@@ -94,15 +94,23 @@ bool sendToLaravel(const SystemState& state) {
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
   http.addHeader("Connection", "close");
   
-  // Mengambil data dari struct state
-  String postData = String("api_key=") + API_KEY +
-                    "&berat=" + String(state.currentWeight, 2) +
-                    "&fakultas=" + state.fakultas +
-                    "&jenis=" + state.waste.getDisplayName();
-  
-  Serial.println("Data: " + postData);
-  
-  int httpCode = http.POST(postData);
+  // Buat buffer char yang cukup besar (misal 256 karakter)
+    char postData[256];
+
+    // Format data ke dalam buffer
+    // %.2f artinya float dengan 2 angka di belakang koma
+    // %s artinya string (char array)
+    snprintf(postData, sizeof(postData), 
+            "api_key=%s&berat=%.2f&fakultas=%s&jenis=%s", 
+            API_KEY, 
+            state.currentWeight, 
+            state.fakultas, 
+            state.waste.getDisplayName().c_str()); // .c_str() mengubah String jadi char*
+
+    Serial.print("Data: ");
+    Serial.println(postData);
+
+    int httpCode = http.POST(postData);
   bool success = false;
   
   if (httpCode > 0) {
@@ -126,14 +134,18 @@ bool sendToMQTT(PubSubClient& client, const SystemState& state) {
     if (!client.connected()) return false;
   }
   
-  // Construct JSON Payload
-  String payload = "{\"weight\":" + String(state.currentWeight, 2) +
-                   ",\"fakultas\":\"" + String(state.fakultas) +
-                   "\",\"jenis\":\"" + state.waste.getDisplayName() + "\"}";
-  
-  Serial.println("MQTT Publish: " + payload);
-  
-  bool success = client.publish(MQTT_TOPIC, payload.c_str());
-  Serial.println(success ? "MQTT Sent" : "MQTT Failed");
-  return success;
+    char payload[200];
+
+    snprintf(payload, sizeof(payload), 
+            "{\"weight\":%.2f,\"fakultas\":\"%s\",\"jenis\":\"%s\"}", 
+            state.currentWeight, 
+            state.fakultas, 
+            state.waste.getDisplayName().c_str());
+
+    Serial.print("📡 MQTT Publish: ");
+    Serial.println(payload);
+
+    bool success = client.publish(MQTT_TOPIC, payload);
+    Serial.println(success ? "MQTT Sent" : "MQTT Failed");
+    return success;
 }
